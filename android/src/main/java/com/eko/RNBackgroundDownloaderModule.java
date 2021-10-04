@@ -56,7 +56,7 @@ public class RNBackgroundDownloaderModule extends ReactContextBaseJavaModule imp
   private static final int ERR_NO_WRITE_PERMISSION = 2;
   private static final int ERR_FILE_NOT_FOUND = 3;
   private static final int ERR_OTHERS = 100;
-  private static final Long TIME_OUT = 100_000L;
+  private static final Long TIME_OUT = 600_000L;
 
   private static Map<Status, Integer> stateMap = new HashMap<Status, Integer>() {{
     put(Status.DOWNLOADING, TASK_RUNNING);

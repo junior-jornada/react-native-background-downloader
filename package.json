@@ -1,7 +1,7 @@
 {
-  "name": "react-native-background-downloader",
-  "version": "2.3.4",
-  "description": "A library for React-Native to help you download large files on iOS and Android both in the foreground and most importantly in the background.",
+  "name": "rn-background-downloader",
+  "version": "0.0.4",
+  "description": "FORK -> A library for React-Native to help you download large files on iOS and Android both in the foreground and most importantly in the background.",
   "main": "index.js",
   "scripts": {
     "test": "jest",
@@ -21,7 +21,7 @@
   "files": [
     "README.md",
     "LICENSE",
-    "react-native-background-downloader.podspec",
+    "rn-background-downloader.podspec",
     "package.json",
     "index.js",
     "lib/",
@@ -30,13 +30,16 @@
     "android/src/"
   ],
   "author": {
-    "name": "Eko labs",
-    "url": "https://developer.helloeko.com",
-    "email": "dev@helloeko.com"
+    "name": "Luiz Jornada",
+    "url": "https://jornadatecnologia.com",
+    "email": "luiz@jornadatecnologia.com"
   },
   "contributors": [
     {
       "name": "Elad Gil"
+    },
+    {
+      "name": "Eko labs"
     }
   ],
   "license": "Apache-2.0",
