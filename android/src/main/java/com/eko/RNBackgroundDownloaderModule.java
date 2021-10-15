@@ -184,19 +184,7 @@ public class RNBackgroundDownloaderModule extends ReactContextBaseJavaModule imp
   }
 
   private int convertErrorCode(Error error) {
-    if ((error == Error.FILE_NOT_CREATED)
-    || (error == Error.WRITE_PERMISSION_DENIED)) {
-      return ERR_NO_WRITE_PERMISSION;
-    } else if ((error == Error.CONNECTION_TIMED_OUT)
-    || (error == Error.NO_NETWORK_CONNECTION)) {
-      return ERR_NO_INTERNET;
-    } else if (error == Error.NO_STORAGE_SPACE) {
-      return ERR_STORAGE_FULL;
-    } else if (error == Error.FILE_NOT_FOUND) {
-      return ERR_FILE_NOT_FOUND;
-    } else {
-      return ERR_OTHERS;
-    }
+    return error.getHttpResponse().getCode();
   }
 
   // JS Methods

@@ -42,7 +42,7 @@ RCT_EXPORT_MODULE();
 
 - (NSDictionary *)constantsToExport {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    
+
     return @{
              @"documents": [paths firstObject],
              @"TaskRunning": @(NSURLSessionTaskStateRunning),
@@ -105,6 +105,25 @@ RCT_EXPORT_MODULE();
     }
 }
 
+- (NSError *)getServerError: (nonnull NSURLSessionDownloadTask *)downloadTask {
+  NSError *serverError;
+  NSInteger httpStatusCode = [((NSHTTPURLResponse *)downloadTask.response) statusCode];
+  if(httpStatusCode != 200) {
+      serverError = [NSError errorWithDomain:NSURLErrorDomain
+                                        code:httpStatusCode
+                                    userInfo:@{NSLocalizedDescriptionKey: [NSHTTPURLResponse localizedStringForStatusCode: httpStatusCode]}];
+  }
+  return serverError;
+}
+
+- (BOOL)saveDownloadedFile: (nonnull RNBGDTaskConfig *) taskConfig downloadURL:(nonnull NSURL *)location error:(NSError **)saveError {
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSURL *destURL = [NSURL fileURLWithPath:taskConfig.destination];
+  [fileManager createDirectoryAtURL:[destURL URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
+  [fileManager removeItemAtURL:destURL error:nil];
+
+  return [fileManager moveItemAtURL:location toURL:destURL error:saveError];
+}
 
 #pragma mark - JS exported methods
 RCT_EXPORT_METHOD(download: (NSDictionary *) options) {
@@ -117,14 +136,14 @@ RCT_EXPORT_METHOD(download: (NSDictionary *) options) {
         return;
     }
     [self lazyInitSession];
-    
+
     NSMutableURLRequest *request = [[NSMutableURLRequest alloc] initWithURL:[NSURL URLWithString:url]];
     if (headers != nil) {
         for (NSString *headerKey in headers) {
             [request setValue:[headers valueForKey:headerKey] forHTTPHeaderField:headerKey];
         }
     }
-    
+
     @synchronized (sharedLock) {
         NSURLSessionDownloadTask __strong *task = [urlSession downloadTaskWithRequest:request];
         RNBGDTaskConfig *taskConfig = [[RNBGDTaskConfig alloc] initWithDictionary: @{@"id": identifier, @"destination": destination}];
@@ -134,7 +153,7 @@ RCT_EXPORT_METHOD(download: (NSDictionary *) options) {
 
         idToTaskMap[identifier] = task;
         idToPercentMap[identifier] = @0.0;
-        
+
         [task resume];
     }
 }
@@ -208,19 +227,17 @@ RCT_EXPORT_METHOD(checkForExistingDownloads: (RCTPromiseResolveBlock)resolve rej
 #pragma mark - NSURLSessionDownloadDelegate methods
 - (void)URLSession:(nonnull NSURLSession *)session downloadTask:(nonnull NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(nonnull NSURL *)location {
     @synchronized (sharedLock) {
-        RNBGDTaskConfig *taskCofig = taskToConfigMap[@(downloadTask.taskIdentifier)];
-        if (taskCofig != nil) {
-            NSFileManager *fileManager = [NSFileManager defaultManager];
-            NSURL *destURL = [NSURL fileURLWithPath:taskCofig.destination];
-            [fileManager createDirectoryAtURL:[destURL URLByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
-            [fileManager removeItemAtURL:destURL error:nil];
-            NSError *moveError;
-            BOOL moved = [fileManager moveItemAtURL:location toURL:destURL error:&moveError];
+        RNBGDTaskConfig *taskConfig = taskToConfigMap[@(downloadTask.taskIdentifier)];
+        if (taskConfig != nil) {
+            NSError *error = [self getServerError:downloadTask];
+            if (error == nil) {
+                [self saveDownloadedFile:taskConfig downloadURL:location error:&error];
+            }
             if (self.bridge) {
-                if (moved) {
-                    [self sendEventWithName:@"downloadComplete" body:@{@"id": taskCofig.id}];
+                if (error == nil) {
+                    [self sendEventWithName:@"downloadComplete" body:@{@"id": taskConfig.id}];
                 } else {
-                    [self sendEventWithName:@"downloadFailed" body:@{@"id": taskCofig.id, @"error": [moveError localizedDescription]}];
+                    [self sendEventWithName:@"downloadFailed" body:@{@"id": taskConfig.id, @"error": @(error.code)}];
                 }
             }
             [self removeTaskFromMap:downloadTask];
@@ -239,14 +256,14 @@ RCT_EXPORT_METHOD(checkForExistingDownloads: (RCTPromiseResolveBlock)resolve rej
                 [self sendEventWithName:@"downloadBegin" body:@{@"id": taskCofig.id, @"expectedBytes": [NSNumber numberWithLongLong: totalBytesExpectedToWrite]}];
                 taskCofig.reportedBegin = YES;
             }
-            
+
             NSNumber *prevPercent = idToPercentMap[taskCofig.id];
             NSNumber *percent = [NSNumber numberWithFloat:(float)totalBytesWritten/(float)totalBytesExpectedToWrite];
             if ([percent floatValue] - [prevPercent floatValue] > 0.01f) {
                 progressReports[taskCofig.id] = @{@"id": taskCofig.id, @"written": [NSNumber numberWithLongLong: totalBytesWritten], @"total": [NSNumber numberWithLongLong: totalBytesExpectedToWrite], @"percent": percent};
                 idToPercentMap[taskCofig.id] = percent;
             }
-            
+
             NSDate *now = [[NSDate alloc] init];
             if ([now timeIntervalSinceDate:lastProgressReport] > 1.5 && progressReports.count > 0) {
                 if (self.bridge) {
@@ -264,7 +281,7 @@ RCT_EXPORT_METHOD(checkForExistingDownloads: (RCTPromiseResolveBlock)resolve rej
         RNBGDTaskConfig *taskCofig = taskToConfigMap[@(task.taskIdentifier)];
         if (error != nil && error.code != -999 && taskCofig != nil) {
             if (self.bridge) {
-                [self sendEventWithName:@"downloadFailed" body:@{@"id": taskCofig.id, @"error": [error localizedDescription]}];
+                [self sendEventWithName:@"downloadFailed" body:@{@"id": taskCofig.id, @"error": @(error.code)}];
             }
             [self removeTaskFromMap:task];
         }
@@ -289,7 +306,7 @@ RCT_EXPORT_METHOD(checkForExistingDownloads: (RCTPromiseResolveBlock)resolve rej
     if (data == nil) {
         return nil;
     }
-    
+
     return [NSKeyedUnarchiver unarchiveObjectWithData:data];
 }
 
